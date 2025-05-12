@@ -1,23 +1,32 @@
-import logo from './logo.svg';
-import './App.css';
+import { useState } from "react";
 
 function App() {
+  const [message, setMessage] = useState("");
+  const [reply, setReply] = useState("");
+
+  const handleSend = async () => {
+    const query = `
+      query {
+        chat(message: "${message}")
+      }
+    `;
+
+    const res = await fetch("https://your-worker-name.your-subdomain.workers.dev/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query })
+    });
+
+    const result = await res.json();
+    setReply(result.data.chat);
+  };
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div style={{ padding: "2rem" }}>
+      <h2>DeepSeek Chat</h2>
+      <input value={message} onChange={e => setMessage(e.target.value)} />
+      <button onClick={handleSend}>发送</button>
+      <p>回复：{reply}</p>
     </div>
   );
 }
