@@ -11,7 +11,7 @@ function App() {
       }
     `;
 
-    const res = await fetch("https://your-worker-name.your-subdomain.workers.dev/graphql", {
+    const res = await fetch("https://royal-hat-e15a.tongyao5186.workers.dev/graphql", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query })
