@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, use } from 'react';
 import './App.css';
 import MarkdownRenderer from './components/markdown'
+import { processCodeReviewStreamData, sleep } from './utils';
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -12,27 +13,12 @@ function App() {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  // 发送消息到 DeepSeek API
-  const sendMessage = async (e) => {
-    e.preventDefault();
-    if (!inputValue.trim()) return;
-
-    // 添加用户消息到聊天记录
-    const userMessage = { role: 'user', content: inputValue };
-    setMessages(prevMessages => [...prevMessages, userMessage]);
-    setInputValue('');
-    setIsLoading(true);
-
-    try {
-      // 准备所有历史消息发送给 API
-      const allMessages = [...messages, userMessage];
-      
-      const response = await fetch(' https://deepseek-worker-test.tongyao5186.workers.dev/graphql', {
+  const CHAT_API_ENDPOINT = 'https://deepseek-worker-test.tongyao5186.workers.dev/graphql';
+      const CODE_REVIEW_API_ENDPOINT = 'https://mastra-agents.tongyao5186.workers.dev/api/agents/codeReviewAgent/stream';
+// ' https://deepseek-worker-test.tongyao5186.workers.dev/graphql'
+  const sendChatMessage = (allMessages)=>{
+    
+   return fetch(CHAT_API_ENDPOINT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -60,17 +46,89 @@ function App() {
           }
         }),
       });
+  }
+  const sendCodeReviewMessage = (message)=> {
+  return fetch(CODE_REVIEW_API_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+   body: JSON.stringify({
+      messages: [
+        {
+          content: message,
+          role: "user"
+        }
+      ]
+    })
+    
+  });
+};
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+  
+  // 发送消息到 DeepSeek API
+  const sendMessage = async (e) => {
+    e.preventDefault();
+    if (!inputValue.trim()) return;
 
-      const data = await response.json();
+    // 添加用户消息到聊天记录
+    const userMessage = { 
+      id: Date.now().toString(),
+      content: inputValue.trim(),
+      role: 'user',
+      timestamp: Date.now(),
+    };
+
+    setMessages(prevMessages => [...prevMessages, userMessage]);
+    setInputValue('');
+    setIsLoading(true);
+
+    try {
+      // 准备所有历史消息发送给 API
+      const allMessages = [...messages, userMessage];
       
-      // 检查响应中是否有错误
-      if (data.errors) {
-        throw new Error(data.errors[0].message);
-      }
-
+      const response = await sendCodeReviewMessage(userMessage.content);
+      console.log(response);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let aiMessage = {
+        id: (Date.now() + 1).toString(),
+        content: '',
+        role: 'assistant',
+        timestamp: Date.now(),
+      };
+      
       // 从响应中提取 AI 消息
-      const aiMessage = data.data.createChatCompletion.choices[0].message;
       setMessages(prevMessages => [...prevMessages, aiMessage]);
+       while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+
+        try {
+          const processedText = processCodeReviewStreamData(chunk);
+            
+          if (processedText) {
+            for (const char of processedText) {
+              aiMessage.content += char;
+              setMessages(prev => 
+                prev.map(msg => 
+                  msg.id === aiMessage.id 
+                    ? { ...msg, content: aiMessage.content }
+                    : msg
+                )
+              );
+              await sleep(30);
+            }
+          }
+        } catch (err) {
+          const error = err;
+          console.error('Failed to parse chunk:', error);
+        }
+      }
     } catch (error) {
       console.error('发送消息时出错:', error);
       // 添加错误消息到聊天
@@ -115,26 +173,14 @@ function App() {
   return (
     <div className="chat-app">
       <header className="chat-header">
-        <h1>DeepSeek AI 聊天</h1>
+        <h1></h1>
       </header>
       
       <div className="chat-container">
         <div className="messages-container">
           {messages.length === 0 ? (
             <div className="welcome-container">
-              <h2>欢迎使用 DeepSeek AI 聊天</h2>
-              <p>您可以开始提问，或者尝试以下示例：</p>
-              <div className="example-questions">
-                <button onClick={() => addExampleQuestion("介绍一下人工智能的最新发展")}>
-                  介绍一下人工智能的最新发展
-                </button>
-                <button onClick={() => addExampleQuestion("如何学习编程？给我一些建议")}>
-                  如何学习编程？给我一些建议
-                </button>
-                <button onClick={() => addExampleQuestion("用Python写一个简单的网络爬虫")}>
-                  用Python写一个简单的网络爬虫
-                </button>
-              </div>
+              <h2>欢迎使用AI代码审核</h2>
             </div>
           ) : (
             messages.map((message, index) => (
@@ -148,16 +194,7 @@ function App() {
                 <div className="message-bubble">
                   {renderMessageContent(message)}
                 </div>
-                {/* <div className="message-bubble">
-                  <div className="message-content">
-                    {message.content.split('\n').map((line, i) => (
-                      <React.Fragment key={i}>
-                        {line}
-                        {i < message.content.split('\n').length - 1 && <br />}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                </div> */}
+               
               </div>
             ))
           )}
@@ -177,13 +214,13 @@ function App() {
         </div>
         
         <form className="input-container" onSubmit={sendMessage}>
-          <input
+          <textarea
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="输入消息..."
+            placeholder="请输入代码片段..."
             disabled={isLoading}
-            className="message-input"
+            className="message-textarea"
           />
           <button 
             type="submit" 

@@ -177,9 +177,10 @@ body {
   padding: 16px;
   border-top: 1px solid #e5e5e5;
   background-color: white;
+  align-items: center;
 }
 
-.message-input {
+.message-input, .message-textarea{
   flex: 1;
   padding: 12px 16px;
   border: 1px solid #e5e5e5;
@@ -188,8 +189,11 @@ body {
   outline: none;
   transition: border-color 0.3s;
 }
+.message-textarea{
+  height: 160px;
+}
 
-.message-input:focus {
+.message-input:focus,.message-textarea:focus {
   border-color: #0084ff;
 }
 
@@ -204,6 +208,7 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.3s;
+  height: 48px;
 }
 
 .send-button:hover:not(:disabled) {
